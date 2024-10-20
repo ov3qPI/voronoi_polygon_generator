@@ -1,4 +1,4 @@
-# Voronoi_Polygon_Generator
+# voronoi_polygon_generator
 
 Generates Voronoi polygons from a set of geographic coordinates and exports them in KML format for visualization in applications like Google Earth.
 
@@ -18,7 +18,7 @@ pip install numpy scipy simplekml
 
 ## Usage
 ```sh
-python coordinate_voronoi_polygon_generator.py <csv_file_path>
+python voronoi_polygon_generator.py <csv_file_path>
 ```
 
 - `<csv_file_path>`: Path to a CSV file containing `Latitude`, `Longitude`, and `Location` fields.
@@ -36,7 +36,7 @@ Latitude,Longitude,Location
 
 Run the script:
 ```sh
-python coordinate_voronoi_polygon_generator.py coordinates.csv
+python voronoi_polygon_generator.py example_coordinates.csv
 ```
 
 ## Notes
