@@ -1,7 +1,7 @@
+import os
 import numpy as np
 from scipy.spatial import Voronoi
 import simplekml
-import sys
 import csv
 
 def add_bounding_circle(points, num_points=100, margin=10):
@@ -21,11 +21,7 @@ def add_bounding_circle(points, num_points=100, margin=10):
     return np.vstack([points, circle_points])
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python coordinate_voronoi_polygon_generator.py <csv_file_path>")
-        sys.exit(1)
-
-    csv_file_path = sys.argv[1]
+    csv_file_path = input("Enter .csv location: ")
     locations = []
     coords = []
 
@@ -80,8 +76,12 @@ def main():
         lat, lon = coord
         kml.newpoint(name=location, coords=[(lon, lat)])
 
-    kml.save("voronoi.kml")
-    print("Voronoi diagram and placemarks exported as voronoi.kml")
+    # Save KML file to the same directory as the input CSV, with a modified name
+    csv_dir = os.path.dirname(csv_file_path)
+    csv_name = os.path.splitext(os.path.basename(csv_file_path))[0]
+    kml_file_path = os.path.join(csv_dir, f"{csv_name}_voronoi.kml")
+    kml.save(kml_file_path)
+    print(f"Voronoi diagram and placemarks exported as {kml_file_path}")
 
 if __name__ == "__main__":
     main()
