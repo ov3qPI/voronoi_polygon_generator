@@ -44,17 +44,12 @@ def main():
     vor = Voronoi(points_with_circle)
     kml = simplekml.Kml()
 
-    print(f"Voronoi points: {points_with_circle}")
-    print(f"Voronoi vertices: {vor.vertices}")
-    print(f"Voronoi regions: {vor.regions}")
-
     # Bounding box limits for clipping
     min_x, min_y = np.min(points_with_circle, axis=0) - 1
     max_x, max_y = np.max(points_with_circle, axis=0) + 1
 
     for point, location, region_index in zip(points, locations, vor.point_region[:len(points)]):
         region = vor.regions[region_index]
-        print(f"Region index: {region_index}, Region: {region}")
         if len(region) > 0 and not -1 in region:
             poly_points = [vor.vertices[i] for i in region]
 
@@ -69,8 +64,6 @@ def main():
             pol.style.linestyle.width = 2
             pol.style.linestyle.color = 'ff00ff00'  # Electric, fighter-jet-HUD green (aabbggrr)
 
-            print(f"Polygon for point {point} (Location: {location}): {polygon_latlon}")
-
     # Adding placemarks for each coordinate
     for coord, location in zip(coords, locations):
         lat, lon = coord
@@ -81,7 +74,7 @@ def main():
     csv_name = os.path.splitext(os.path.basename(csv_file_path))[0]
     kml_file_path = os.path.join(csv_dir, f"{csv_name}_voronoi.kml")
     kml.save(kml_file_path)
-    print(f"Voronoi diagram and placemarks exported as {kml_file_path}")
+    print(f"Voronoi polygons and placemarks exported as {kml_file_path}")
 
 if __name__ == "__main__":
     main()
