@@ -3,6 +3,7 @@ import numpy as np
 from scipy.spatial import Voronoi
 import simplekml
 import csv
+import matplotlib.pyplot as plt
 
 def add_bounding_circle(points, num_points=100, margin=10):
     # Calculate the centroid of the original points
@@ -19,6 +20,17 @@ def add_bounding_circle(points, num_points=100, margin=10):
     ])
 
     return np.vstack([points, circle_points])
+
+def generate_custom_icon(icon_path):
+    # Generate a crosshair as an icon
+    fig, ax = plt.subplots(figsize=(0.5, 0.5), dpi=100)
+    ax.plot([0.1, 0.9], [0.5, 0.5], color='red', linewidth=2)  # Horizontal line
+    ax.plot([0.5, 0.5], [0.1, 0.9], color='red', linewidth=2)  # Vertical line
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis('off')
+    plt.savefig(icon_path, transparent=True, bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
 
 def main():
     csv_file_path = input("Enter .csv location: ")
@@ -64,13 +76,19 @@ def main():
             pol.style.linestyle.width = 2
             pol.style.linestyle.color = 'ff00ff00'  # Electric, fighter-jet-HUD green (aabbggrr)
 
-    # Adding placemarks for each coordinate
+    # Generate custom icon and set path
+    csv_dir = os.path.dirname(csv_file_path)
+    icon_path = os.path.join(csv_dir, "custom_crosshair.png")
+    generate_custom_icon(icon_path)
+
+    # Adding placemarks for each coordinate with the generated custom icon
     for coord, location in zip(coords, locations):
         lat, lon = coord
-        kml.newpoint(name=location, coords=[(lon, lat)])
+        placemark = kml.newpoint(name=location, coords=[(lon, lat)])
+        placemark.style.iconstyle.icon.href = icon_path  # Custom crosshair icon
+        placemark.style.iconstyle.scale = 1.2  # Adjust the size of the icon
 
     # Save KML file to the same directory as the input CSV, with a modified name
-    csv_dir = os.path.dirname(csv_file_path)
     csv_name = os.path.splitext(os.path.basename(csv_file_path))[0]
     kml_file_path = os.path.join(csv_dir, f"{csv_name}_voronoi.kml")
     kml.save(kml_file_path)
