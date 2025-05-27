@@ -1,9 +1,11 @@
 import os
+import sys
 import numpy as np
 from scipy.spatial import Voronoi
 import simplekml
-import csv
+import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
+
 
 def add_bounding_circle(points, num_points=100, margin=10):
     # Calculate the centroid of the original points
@@ -21,35 +23,57 @@ def add_bounding_circle(points, num_points=100, margin=10):
 
     return np.vstack([points, circle_points])
 
+
 def generate_custom_icon(icon_path):
     # Generate a crosshair as an icon
     fig, ax = plt.subplots(figsize=(0.5, 0.5), dpi=100)
-    ax.plot([0.1, 0.9], [0.5, 0.5], color='red', linewidth=2)  # Horizontal line
-    ax.plot([0.5, 0.5], [0.1, 0.9], color='red', linewidth=2)  # Vertical line
+    ax.plot([0.1, 0.9], [0.5, 0.5], color='red', linewidth=2)
+    ax.plot([0.5, 0.5], [0.1, 0.9], color='red', linewidth=2)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis('off')
     plt.savefig(icon_path, transparent=True, bbox_inches='tight', pad_inches=0)
     plt.close(fig)
 
-def main():
-    csv_file_path = input("Enter .csv location: ")
-    locations = []
+
+def parse_kml_placemarks(kml_file):
+    """
+    Parse a KML file and extract placemark point geometries.
+    Returns a list of (name, (lat, lon)).
+    """
+    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+    tree = ET.parse(kml_file)
+    root = tree.getroot()
+
     coords = []
+    names = []
 
-    with open(csv_file_path, mode='r') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            try:
-                lat = float(row['Latitude'])
-                lon = float(row['Longitude'])
-                location = row['Location']
-                coords.append([lat, lon])
-                locations.append(location)
-            except ValueError:
-                print(f"Invalid coordinate format in row: {row}")
-                sys.exit(1)
+    for pm in root.findall('.//kml:Placemark', ns):
+        # Get the name if present
+        name_elem = pm.find('kml:name', ns)
+        name = name_elem.text if name_elem is not None else 'Unnamed'
 
+        # Only handle Point geometries
+        pt = pm.find('.//kml:Point/kml:coordinates', ns)
+        if pt is None or not pt.text:
+            # Skip non-point geometries
+            continue
+
+        # Coordinates are in 'lon,lat[,alt]' format
+        parts = pt.text.strip().split(',')
+        lon, lat = float(parts[0]), float(parts[1])
+
+        coords.append((lat, lon))
+        names.append(name)
+
+    if not coords:
+        print("No valid placemark Point geometries found in the KML.")
+        sys.exit(1)
+
+    return names, coords
+
+
+def generate_voronoi(names, coords, output_file):
     points = np.array(coords)
     points_with_circle = add_bounding_circle(points)
 
@@ -60,7 +84,7 @@ def main():
     min_x, min_y = np.min(points_with_circle, axis=0) - 1
     max_x, max_y = np.max(points_with_circle, axis=0) + 1
 
-    for point, location, region_index in zip(points, locations, vor.point_region[:len(points)]):
+    for point, name, region_index in zip(points, names, vor.point_region[:len(points)]):
         region = vor.regions[region_index]
         if len(region) > 0 and not -1 in region:
             poly_points = [vor.vertices[i] for i in region]
@@ -68,31 +92,60 @@ def main():
             # Clip the polygon to the bounding box
             poly_points = np.clip(poly_points, [min_x, min_y], [max_x, max_y])
 
-            polygon_latlon = [(lat, lon) for lon, lat in poly_points]  # Convert coordinates for KML
-            pol = kml.newpolygon(name=location, outerboundaryis=polygon_latlon)
-
-            # Set polygon style to outlined only with specific color
-            pol.style.polystyle.color = simplekml.Color.changealphaint(0, simplekml.Color.green)  # Fully transparent fill
+            # Convert to KML lat/lon order
+            polygon_latlon = [(lat, lon) for lon, lat in poly_points]
+            pol = kml.newpolygon(name=name, outerboundaryis=polygon_latlon)
+            pol.style.polystyle.color = simplekml.Color.changealphaint(0, simplekml.Color.green)
             pol.style.linestyle.width = 2
-            pol.style.linestyle.color = 'ff00ff00'  # Electric, fighter-jet-HUD green (aabbggrr)
+            pol.style.linestyle.color = 'ff00ff00'
 
-    # Generate custom icon and set path
-    csv_dir = os.path.dirname(csv_file_path)
-    icon_path = os.path.join(csv_dir, "custom_crosshair.png")
+    # Generate and add custom icon
+    icon_path = os.path.splitext(output_file)[0] + '_crosshair.png'
     generate_custom_icon(icon_path)
 
-    # Adding placemarks for each coordinate with the generated custom icon
-    for coord, location in zip(coords, locations):
-        lat, lon = coord
-        placemark = kml.newpoint(name=location, coords=[(lon, lat)])
-        placemark.style.iconstyle.icon.href = icon_path  # Custom crosshair icon
-        placemark.style.iconstyle.scale = 1.2  # Adjust the size of the icon
+    for lat, lon, name in [(lat, lon, n) for n, (lat, lon) in zip(names, coords)]:
+        pm = kml.newpoint(name=name, coords=[(lon, lat)])
+        pm.style.iconstyle.icon.href = icon_path
+        pm.style.iconstyle.scale = 1.2
 
-    # Save KML file to the same directory as the input CSV, with a modified name
-    csv_name = os.path.splitext(os.path.basename(csv_file_path))[0]
-    kml_file_path = os.path.join(csv_dir, f"{csv_name}_voronoi.kml")
-    kml.save(kml_file_path)
-    print(f"Voronoi polygons and placemarks exported as {kml_file_path}")
+    kml.save(output_file)
+    print(f"Voronoi KML written to {output_file}")
 
-if __name__ == "__main__":
+
+def main():
+    input_path = input("Enter input .kml or .csv file path: ")
+    base, ext = os.path.splitext(input_path)
+    ext = ext.lower()
+
+    if ext == '.kml':
+        names, coords = parse_kml_placemarks(input_path)
+        output_file = base + '_voronoi.kml'
+        generate_voronoi(names, coords, output_file)
+
+    elif ext == '.csv':
+        import csv
+        names = []
+        coords = []
+        with open(input_path, mode='r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    lat = float(row['Latitude'])
+                    lon = float(row['Longitude'])
+                    names.append(row.get('Location', ''))
+                    coords.append((lat, lon))
+                except Exception as e:
+                    print(f"Skipping invalid row {row}: {e}")
+        if not coords:
+            print("No valid coordinates found in CSV.")
+            sys.exit(1)
+        output_file = base + '_voronoi.kml'
+        generate_voronoi(names, coords, output_file)
+
+    else:
+        print("Unsupported file type. Please provide a .kml or .csv file.")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
     main()
